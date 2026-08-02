@@ -12,8 +12,8 @@ func TenantMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 从 context 中获取用户信息
 		userID, existsID := c.Get("userId")
-		username, existsName := c.Get("username")
-		role, existsRole := c.Get("role")
+		username, _ := c.Get("username")
+		role, _ := c.Get("role")
 
 		// 如果没有用户信息，继续处理（可能在其他中间件之后使用）
 		if !existsID {

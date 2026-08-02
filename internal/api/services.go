@@ -1,6 +1,8 @@
 package api
 
 import (
+	"NodePassDash/internal/middleware"
+	"NodePassDash/internal/models"
 	"NodePassDash/internal/services"
 	"NodePassDash/internal/tunnel"
 	"net/http"
@@ -47,7 +49,16 @@ func SetupServicesRoutes(rg *gin.RouterGroup, servicesService *services.ServiceI
 
 // GetServices 获取所有服务
 func (h *ServicesHandler) GetServices(c *gin.Context) {
-	serviceList, err := h.servicesService.GetServices()
+	userID, isTenant := middleware.GetTenantUserID(c)
+	isAdmin := middleware.IsAdmin(c)
+
+	var serviceList []*models.Services
+	var err error
+	if isTenant && !isAdmin {
+		serviceList, err = h.servicesService.GetServicesByUserID(userID)
+	} else {
+		serviceList, err = h.servicesService.GetServices()
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -2,6 +2,7 @@ package api
 
 import (
 	"NodePassDash/internal/group"
+	"NodePassDash/internal/middleware"
 	"net/http"
 	"strconv"
 
@@ -35,7 +36,16 @@ func SetupGroupRoutes(rg *gin.RouterGroup, groupService *group.Service) {
 
 // GetGroups 获取所有分组
 func (h *GroupHandler) GetGroups(c *gin.Context) {
-	groups, err := h.groupService.GetGroups()
+	userID, isTenant := middleware.GetTenantUserID(c)
+	isAdmin := middleware.IsAdmin(c)
+
+	var groups []*group.Group
+	var err error
+	if isTenant && !isAdmin {
+		groups, err = h.groupService.GetGroupsByUserID(userID)
+	} else {
+		groups, err = h.groupService.GetGroups()
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -55,6 +65,12 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求数据"})
 		return
+	}
+
+	// 设置 user_id
+	userID, _ := middleware.GetTenantUserID(c)
+	if userID > 0 {
+		req.UserID = &userID
 	}
 
 	groupObj, err := h.groupService.CreateGroup(&req)
@@ -78,6 +94,16 @@ func (h *GroupHandler) UpdateGroup(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的分组ID"})
 		return
+	}
+
+	// 所有权检查：非管理员只能更新自己的分组
+	userID, _ := middleware.GetTenantUserID(c)
+	isAdmin := middleware.IsAdmin(c)
+	if !isAdmin {
+		if _, err := h.groupService.GetGroupByIDAndUserID(id, userID); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "no permission to update this group"})
+			return
+		}
 	}
 
 	var req group.UpdateGroupRequest
@@ -112,6 +138,16 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 		}
 		c.JSON(http.StatusBadRequest, response)
 		return
+	}
+
+	// 所有权检查：非管理员只能删除自己的分组
+	userID, _ := middleware.GetTenantUserID(c)
+	isAdmin := middleware.IsAdmin(c)
+	if !isAdmin {
+		if _, err := h.groupService.GetGroupByIDAndUserID(id, userID); err != nil {
+			c.JSON(http.StatusForbidden, group.GroupResponse{Success: false, Error: "no permission to delete this group"})
+			return
+		}
 	}
 
 	err = h.groupService.DeleteGroup(id)

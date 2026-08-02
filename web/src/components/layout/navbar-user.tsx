@@ -25,6 +25,7 @@ import { buildApiUrl } from "@/lib/utils";
 export const NavbarUser = () => {
   const { t } = useTranslation("common");
   const { user, logout } = useAuth();
+  const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
   const {
     isOpen: isPasswordOpen,
@@ -358,6 +359,8 @@ export const NavbarUser = () => {
               onImportOpen();
             } else if (key === "system-settings") {
               navigate("/settings");
+            } else if (key === "user-management") {
+              navigate("/settings/users");
             }
           }}
         >
@@ -402,6 +405,16 @@ export const NavbarUser = () => {
           >
             {t("navbarUser.menu.importData")}
           </DropdownItem>
+
+          {/* 用户管理（仅管理员）*/}
+          {isAdmin && (
+            <DropdownItem
+              key="user-management"
+              startContent={<Icon icon="solar:users-group-rounded-linear" width={18} />}
+            >
+              {t("navbarUser.menu.userManagement")}
+            </DropdownItem>
+          )}
 
           {/* 系统设置 */}
           <DropdownItem

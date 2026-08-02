@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+
 	"NodePassDash/internal/auth"
 	"NodePassDash/internal/middleware"
 	"net/http"
@@ -53,7 +55,7 @@ func SetupUserRoutes(rg *gin.RouterGroup, authService *auth.Service) {
 
 	// 管理员路由
 	adminGroup := rg.Group("/users")
-	adminGroup.Use(authMiddleware, middleware.RequireAdmin)
+	adminGroup.Use(authMiddleware, middleware.RequireAdmin(func(c *gin.Context) { c.Next() }))
 	{
 		adminGroup.GET("", userHandler.HandleListUsers)
 		adminGroup.GET("/:id", userHandler.HandleGetUser)
@@ -109,8 +111,8 @@ func (h *UserHandler) HandleRegister(c *gin.Context) {
 
 // HandleGetMe 获取当前用户信息
 func (h *UserHandler) HandleGetMe(c *gin.Context) {
-	username, exists := middleware.GetUsername(c)
-	if !exists {
+	username := middleware.GetUsername(c)
+	if username == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not logged in"})
 		return
 	}
@@ -133,8 +135,8 @@ func (h *UserHandler) HandleGetMe(c *gin.Context) {
 
 // HandleChangePassword 修改密码
 func (h *UserHandler) HandleChangePassword(c *gin.Context) {
-	username, exists := middleware.GetUsername(c)
-	if !exists {
+	username := middleware.GetUsername(c)
+	if username == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not logged in"})
 		return
 	}
@@ -157,6 +159,7 @@ func (h *UserHandler) HandleChangePassword(c *gin.Context) {
 
 	// 验证当前密码
 	ok, msg := h.authService.VerifyPassword(username, req.CurrentPassword)
+	_ = msg
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": msg})
 		return
@@ -242,7 +245,7 @@ func (h *UserHandler) HandleUpdateUser(c *gin.Context) {
 	}
 
 	// 记录审计日志
-	currentUsername, _ := middleware.GetUsername(c)
+	currentUsername := middleware.GetUsername(c)
 	h.authService.LogAuditByUserIDAndName(c, currentUsername, "user_update", gin.H{"targetUserId": id})
 
 	c.JSON(http.StatusOK, gin.H{
@@ -261,7 +264,7 @@ func (h *UserHandler) HandleDeleteUser(c *gin.Context) {
 	}
 
 	// 不能删除自己
-	currentUser, _ := middleware.GetUsername(c)
+	currentUser := middleware.GetUsername(c)
 	user, err := h.authService.GetUserByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -292,18 +295,18 @@ func (h *UserHandler) HandleDeleteUser(c *gin.Context) {
 // validateUserCredentials 校验用户凭据
 func validateUserCredentials(username, password string) error {
 	if len(username) < 3 || len(username) > 20 {
-		return nil
+		return errors.New("用户名长度须在 3-20 个字符之间")
 	}
 	for _, r := range username {
 		isAlpha := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 		isDigit := r >= '0' && r <= '9'
 		isUnderscore := r == '_'
 		if !(isAlpha || isDigit || isUnderscore) {
-			return nil
+			return errors.New("用户名只能包含字母、数字和下划线")
 		}
 	}
 	if len(password) < 8 {
-		return nil
+		return errors.New("密码长度不能少于 8 个字符")
 	}
 	return nil
 }

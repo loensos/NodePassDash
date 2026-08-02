@@ -40,10 +40,19 @@ func NewService(db *gorm.DB, tunnelService *tunnel.Service, sseManager *sse.Mana
 	}
 }
 
-// GetServices 获取所有服务（按 sorts 降序排序，更大的值排在前面）
+// GetServices 获取所有服务（管理员用，按 sorts 降序排序）
 func (s *ServiceImpl) GetServices() ([]*models.Services, error) {
+	return s.GetServicesByUserID(0)
+}
+
+// GetServicesByUserID 获取指定用户的服务列表
+func (s *ServiceImpl) GetServicesByUserID(userID int64) ([]*models.Services, error) {
 	var services []*models.Services
-	err := s.db.Order("sorts DESC").Find(&services).Error
+	query := s.db.Order("sorts DESC")
+	if userID > 0 {
+		query = query.Where("user_id = ?", userID)
+	}
+	err := query.Find(&services).Error
 	return services, err
 }
 

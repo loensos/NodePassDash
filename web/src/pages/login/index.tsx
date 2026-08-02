@@ -123,12 +123,24 @@ export default function LoginPage() {
         // 保存 JWT token
         setToken(result.token, result.expiresAt);
 
-        // 登录成功后设置用户状态并持久化
-        const loginUser = { username: formData.username };
-
-        // 先保存到localStorage，再设置状态
-        localStorage.setItem("nodepass.user", JSON.stringify(loginUser));
-        setUserDirectly(loginUser);
+        // 获取用户角色
+        try {
+          const userRes = await fetch(buildApiUrl("/api/users/me"));
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            const loginUser = { username: formData.username, role: userData.role };
+            localStorage.setItem("nodepass.user", JSON.stringify(loginUser));
+            setUserDirectly(loginUser);
+          } else {
+            const loginUser = { username: formData.username };
+            localStorage.setItem("nodepass.user", JSON.stringify(loginUser));
+            setUserDirectly(loginUser);
+          }
+        } catch {
+          const loginUser = { username: formData.username };
+          localStorage.setItem("nodepass.user", JSON.stringify(loginUser));
+          setUserDirectly(loginUser);
+        }
 
         // 检查是否是默认凭据
         if (result.isDefaultCredentials) {
@@ -209,6 +221,12 @@ export default function LoginPage() {
               {!isLoginDisabled && (
                 <p className="text-small text-default-500">
                   {t("login.subtitle")}
+              <p className="text-center text-sm text-default-500 mt-2">
+                {t("login.noAccount")}{" "}
+                <a href="/register" className="text-primary font-medium">
+                  {t("login.goToRegisterLink")}
+                </a>
+              </p>
                 </p>
               )}
             </CardHeader>
@@ -314,6 +332,14 @@ export default function LoginPage() {
                       ? t("login.dividerLoginDisabled")
                       : t("login.divider")}
                   </p>
+                  {!isLoginDisabled && (
+                    <p className="text-center text-sm text-default-500 mt-2">
+                      {t("login.hasAccount")}{" "}
+                      <a href="/register" className="text-primary font-medium">
+                        {t("login.goToRegister")}
+                      </a>
+                    </p>
+                  )}
                   <div className="flex flex-col gap-3">
                     {oauthProviders.provider === "github" && (
                       <Button

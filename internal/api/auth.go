@@ -48,7 +48,7 @@ func SetupAuthRoutes(rg *gin.RouterGroup, authService *auth.Service) {
 	rg.GET("/auth/validate", authMiddleware, authHandler.HandleValidateSession)
 	rg.GET("/auth/me", authMiddleware, authHandler.HandleGetMe)
 	rg.POST("/auth/change-password", authMiddleware, authHandler.HandleChangePassword)
-	rg.POST("/auth/change-username", authMiddleware, authHandler.HandleChangeUsername)
+	rg.POST("/auth/reset-password", authMiddleware, authHandler.HandleAdminResetPassword)
 	rg.POST("/auth/update-security", authMiddleware, authHandler.HandleUpdateSecurity)
 
 	// OAuth2 配置的受保护路由
@@ -291,6 +291,36 @@ func (h *AuthHandler) HandleChangePassword(c *gin.Context) {
 		"success": true,
 		"message": msg,
 	})
+}
+
+// HandleAdminResetPassword 管理员重置用户密码（公开路由）
+func (h *AuthHandler) HandleAdminResetPassword(c *gin.Context) {
+	// 仅管理员可操作
+	if !middleware.IsAdmin(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
+		return
+	}
+
+	var req struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if len(req.Password) < 8 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "密码长度不能少于8位"})
+		return
+	}
+
+	if err := h.authService.ResetUserPassword(req.Username, req.Password); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Password reset successfully"})
 }
 
 // HandleChangeUsername 修改用户名

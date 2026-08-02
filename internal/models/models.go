@@ -23,6 +23,7 @@ type Endpoint struct {
 	KeyPath     *string        `json:"keyPath,omitempty" gorm:"type:text;column:key_path"`
 	Uptime      *int64         `json:"uptime,omitempty" gorm:"column:uptime"`
 	LastCheck   time.Time      `json:"lastCheck" gorm:"column:last_check"`
+	UserID      *int64         `json:"userId,omitempty" gorm:"index;column:user_id"`
 	CreatedAt   time.Time      `json:"createdAt" gorm:"autoCreateTime;column:created_at"`
 	UpdatedAt   time.Time      `json:"updatedAt" gorm:"autoUpdateTime;column:updated_at"`
 
@@ -109,6 +110,8 @@ type Tunnel struct {
 	// Service关联ID - 用于快速查询和排序，避免解析peer JSON字段
 	ServiceSID *string `json:"serviceSid,omitempty" gorm:"type:text;index;column:service_sid"`
 
+	UserID *int64 `json:"userId,omitempty" gorm:"index;column:user_id"`
+
 	CreatedAt     time.Time `json:"createdAt" gorm:"autoCreateTime;index;column:created_at"`
 	UpdatedAt     time.Time `json:"updatedAt" gorm:"autoUpdateTime;column:updated_at"`
 	LastEventTime NullTime  `json:"lastEventTime,omitempty" gorm:"column:last_event_time"`
@@ -140,6 +143,7 @@ type Services struct {
 	ExitHost           *string   `json:"exitHost,omitempty" gorm:"type:text;column:exit_host"`
 	TotalRx            int64     `json:"totalRx" gorm:"default:0;column:total_rx"`
 	TotalTx            int64     `json:"totalTx" gorm:"default:0;column:total_tx"`
+	UserID             *int64    `json:"userId,omitempty" gorm:"index;column:user_id"`
 	CreatedAt          time.Time `json:"createdAt" gorm:"autoCreateTime;column:created_at"`
 	UpdatedAt          time.Time `json:"updatedAt" gorm:"autoUpdateTime;column:updated_at"`
 	Sorts              int64     `json:"sorts" gorm:"type:int;column:sorts"`
@@ -158,6 +162,7 @@ type TunnelOperationLog struct {
 	Action     OperationAction `json:"action" gorm:"type:text;not null;index;column:action"`
 	Status     string          `json:"status" gorm:"type:text;not null;column:status"`
 	Message    *string         `json:"message,omitempty" gorm:"type:text;column:message"`
+	UserID     *int64          `json:"userId,omitempty" gorm:"index;column:user_id"`
 	CreatedAt  time.Time       `json:"createdAt" gorm:"autoCreateTime;index;column:created_at"`
 }
 
@@ -200,6 +205,7 @@ func (UserSession) TableName() string {
 type Group struct {
 	ID        int64     `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
 	Name      string    `json:"name" gorm:"type:text;uniqueIndex;not null;column:name"`
+	UserID    *int64    `json:"userId,omitempty" gorm:"index;column:user_id"`
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime;index;column:created_at"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime;column:updated_at"`
 
@@ -217,6 +223,7 @@ type TunnelGroup struct {
 	ID        int64     `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
 	TunnelID  int64     `json:"tunnel_id" gorm:"not null;index;column:tunnel_id"`
 	GroupID   int64     `json:"group_id" gorm:"not null;index;column:group_id"`
+	UserID    *int64    `json:"userId,omitempty" gorm:"index;column:user_id"`
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime;column:created_at"`
 
 	// 关联

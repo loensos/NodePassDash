@@ -11,6 +11,7 @@ import { buildApiUrl } from "@/lib/utils";
 
 interface User {
   username: string;
+  role?: "admin" | "viewer";
 }
 
 interface AuthContextType {

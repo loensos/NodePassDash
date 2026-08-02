@@ -29,6 +29,7 @@ type CreateEndpointRequest struct {
 	APIKey   string `json:"apiKey" validate:"required,max=200"`
 	Hostname string `json:"hostname,omitempty"` // 连接IP，留空则自动从URL解析
 	Color    string `json:"color,omitempty"`
+	UserID   *int64 `json:"-"` // 内部字段，由 API 层注入
 }
 
 // UpdateEndpointRequest 更新端点请求

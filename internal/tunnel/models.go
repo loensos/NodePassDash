@@ -54,6 +54,7 @@ type TunnelQueryParams struct {
 	EndpointGroupID string `json:"endpoint_group_id"` // 主控组筛选
 	PortFilter      string `json:"port_filter"`       // 端口筛选
 	GroupID         string `json:"group_id"`          // 分组筛选
+	UserID          int64  `json:"user_id"`           // 用户ID筛选（多租户隔离）
 	Page            int    `json:"page"`              // 页码
 	PageSize        int    `json:"page_size"`         // 每页大小
 	SortBy          string `json:"sort_by"`           // 排序字段

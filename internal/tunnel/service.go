@@ -2624,6 +2624,12 @@ func (s *Service) GetTunnelsWithPagination(params TunnelQueryParams) (*TunnelLis
 		}
 	}
 
+	// 用户ID筛选（多租户隔离）
+	if params.UserID > 0 {
+		whereConditions = append(whereConditions, "t.user_id = ?")
+		args = append(args, params.UserID)
+	}
+
 	// 构建完整的 WHERE 子句
 	var whereClause string
 	if len(whereConditions) > 0 {

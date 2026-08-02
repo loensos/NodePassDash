@@ -3,6 +3,7 @@ package api
 import (
 	log "NodePassDash/internal/log"
 	"NodePassDash/internal/metrics"
+	"NodePassDash/internal/middleware"
 	"NodePassDash/internal/models"
 	"NodePassDash/internal/nodepass"
 	"NodePassDash/internal/sse"
@@ -130,6 +131,10 @@ func (h *TunnelHandler) HandleGetTunnels(c *gin.Context) {
 		sortOrder = "desc" // 默认降序
 	}
 
+	// 多租户隔离：获取当前用户ID
+	userID, isTenant := middleware.GetTenantUserID(c)
+	isAdmin := middleware.IsAdmin(c)
+
 	result, err := h.tunnelService.GetTunnelsWithPagination(tunnel.TunnelQueryParams{
 		Search:          searchFilter,
 		Status:          statusFilter,
@@ -137,6 +142,7 @@ func (h *TunnelHandler) HandleGetTunnels(c *gin.Context) {
 		EndpointGroupID: endpointGroupFilter,
 		PortFilter:      portFilter,
 		GroupID:         groupFilter,
+		UserID:          func() int64 { if isTenant && !isAdmin { return userID }; return 0 }(),
 		Page:            page,
 		PageSize:        pageSize,
 		SortBy:          sortBy,
@@ -291,6 +297,17 @@ func (h *TunnelHandler) HandleDeleteTunnel(c *gin.Context) {
 	// 如果未提供 instanceId ，则尝试从路径参数中解析数据库 id
 	idStr := c.Param("id")
 	tunnelID, _ := strconv.ParseInt(idStr, 10, 64)
+
+	// 所有权检查：非管理员只能删除自己的隧道
+	userID, _ := middleware.GetTenantUserID(c)
+	isAdmin := middleware.IsAdmin(c)
+	if !isAdmin {
+		var t models.Tunnel
+		if err := h.tunnelService.GormDB().Where("id = ? AND user_id = ?", tunnelID, userID).First(&t).Error; err != nil {
+			c.JSON(http.StatusForbidden, tunnel.TunnelResponse{Success: false, Error: "no permission to delete this tunnel"})
+			return
+		}
+	}
 
 	if err := h.tunnelService.DeleteTunnelIdAndWait(3*time.Second, &tunnelID); err != nil {
 		c.JSON(http.StatusBadRequest, tunnel.TunnelResponse{

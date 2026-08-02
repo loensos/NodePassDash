@@ -23,7 +23,8 @@ type TunnelGroup struct {
 
 // CreateGroupRequest 创建分组请求
 type CreateGroupRequest struct {
-	Name string `json:"name" validate:"required"`
+	Name   string `json:"name" validate:"required"`
+	UserID *int64 `json:"-"` // 内部字段，由 API 层注入
 }
 
 // UpdateGroupRequest 更新分组请求

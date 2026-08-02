@@ -34,7 +34,7 @@ func (s *Service) DB() *gorm.DB {
 	return s.db
 }
 
-// GetEndpoints 获取所有端点列表
+// GetEndpoints 获取所有端点列表（管理员用）
 func (s *Service) GetEndpoints() ([]EndpointWithStats, error) {
 	var endpoints []EndpointWithStats
 
@@ -48,6 +48,26 @@ func (s *Service) GetEndpoints() ([]EndpointWithStats, error) {
 	}
 
 	// 如果没有数据，返回空数组
+	if endpoints == nil {
+		endpoints = []EndpointWithStats{}
+	}
+
+	return endpoints, nil
+}
+
+// GetEndpointsByUserID 获取指定用户的端点列表
+func (s *Service) GetEndpointsByUserID(userID int64) ([]EndpointWithStats, error) {
+	var endpoints []EndpointWithStats
+
+	err := s.db.Table("endpoints e").
+		Where("e.user_id = ?", userID).
+		Order("e.created_at DESC").
+		Scan(&endpoints).Error
+
+	if err != nil {
+		return nil, err
+	}
+
 	if endpoints == nil {
 		endpoints = []EndpointWithStats{}
 	}

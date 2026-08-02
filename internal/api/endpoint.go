@@ -4,6 +4,7 @@ import (
 	"NodePassDash/internal/db"
 	"NodePassDash/internal/endpoint"
 	log "NodePassDash/internal/log"
+	"NodePassDash/internal/middleware"
 	"NodePassDash/internal/models"
 	"NodePassDash/internal/nodepass"
 	"NodePassDash/internal/sse"
@@ -66,7 +67,29 @@ func SetupEndpointRoutes(rg *gin.RouterGroup, endpointService *endpoint.Service,
 
 // HandleGetEndpoints 获取端点列表
 func (h *EndpointHandler) HandleGetEndpoints(c *gin.Context) {
-	endpoints, err := h.endpointService.GetEndpoints()
+	userID, isTenant := middleware.GetTenantUserID(c)
+	isAdmin := middleware.IsAdmin(c)
+
+	var endpoints []endpoint.EndpointWithStats
+	if isTenant && !isAdmin {
+		// 普通用户只能看自己的端点
+		endpoints, err := h.endpointService.GetEndpointsByUserID(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, endpoint.EndpointResponse{
+				Success: false,
+				Error:   "Failed to retrieve endpoint list: " + err.Error(),
+			})
+			return
+		}
+		if endpoints == nil {
+			endpoints = []endpoint.EndpointWithStats{}
+		}
+		c.JSON(http.StatusOK, endpoints)
+		return
+	}
+	// 管理员或无租户信息时返回全部
+	var err error
+	endpoints, err = h.endpointService.GetEndpoints()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, endpoint.EndpointResponse{
 			Success: false,
@@ -106,6 +129,12 @@ func (h *EndpointHandler) HandleCreateEndpoint(c *gin.Context) {
 			Error:   "Missing required fields",
 		})
 		return
+	}
+
+	// 设置 user_id
+	userID, _ := middleware.GetTenantUserID(c)
+	if userID > 0 {
+		req.UserID = &userID
 	}
 
 	newEndpoint, err := h.endpointService.CreateEndpoint(req)
@@ -201,6 +230,20 @@ func (h *EndpointHandler) HandleDeleteEndpoint(c *gin.Context) {
 			Error:   "Invalid endpoint ID",
 		})
 		return
+	}
+
+	// 所有权检查：非管理员只能删除自己的端点
+	userID, _ := middleware.GetTenantUserID(c)
+	isAdmin := middleware.IsAdmin(c)
+	if !isAdmin {
+		var ep models.Endpoint
+		if err := h.endpointService.DB().Where("id = ? AND user_id = ?", id, userID).First(&ep).Error; err != nil {
+			c.JSON(http.StatusForbidden, endpoint.EndpointResponse{
+				Success: false,
+				Error:   "no permission to delete this endpoint",
+			})
+			return
+		}
 	}
 
 	// 先获取端点下所有实例ID用于清理文件日志

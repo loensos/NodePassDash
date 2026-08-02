@@ -1,0 +1,52 @@
+{
+  "register": {
+    "title": "Register New Account",
+    "subtitle": "Create a new account to continue",
+    "username": "Username",
+    "usernamePlaceholder": "Username (3-20 characters, letters/digits/underscore)",
+    "password": "Password",
+    "passwordPlaceholder": "Password (at least 8 characters)",
+    "confirmPassword": "Confirm Password",
+    "confirmPasswordPlaceholder": "Enter password again",
+    "submit": "Register",
+    "submitting": "Registering...",
+    "haveAccount": "Already have an account?",
+    "switchToLogin": "Sign In",
+    "success": "Registration successful",
+    "successDesc": "Registration successful, please sign in",
+    "errors": {
+      "usernameInvalid": "Invalid username format (3-20 characters, letters/digits/underscore)",
+      "passwordTooShort": "Password must be at least 8 characters",
+      "passwordMismatch": "Passwords do not match",
+      "usernameExists": "Username already exists",
+      "networkError": "Network error, please try again"
+    }
+  },
+  "userManagement": {
+    "title": "User Management",
+    "subtitle": "Manage all user accounts",
+    "username": "Username",
+    "role": "Role",
+    "active": "Status",
+    "createdAt": "Created At",
+    "actions": "Actions",
+    "admin": "Admin",
+    "viewer": "Viewer",
+    "setAdmin": "Set as Admin",
+    "setViewer": "Set as Viewer",
+    "enable": "Enable",
+    "disable": "Disable",
+    "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete {username}? This action cannot be undone.",
+    "resetPassword": "Reset Password",
+    "noUsers": "No users found",
+    "loading": "Loading...",
+    "toast": {
+      "updateSuccess": "Updated successfully",
+      "updateFailed": "Update failed",
+      "deleteSuccess": "Deleted successfully",
+      "deleteFailed": "Delete failed",
+      "networkError": "Network error"
+    }
+  }
+}

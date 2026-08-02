@@ -38,6 +38,7 @@ func (s *Service) CreateGroup(req *CreateGroupRequest) (*Group, error) {
 		Name:      req.Name,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		UserID:    req.UserID,
 	}
 
 	err = s.db.Create(&group).Error
@@ -53,10 +54,19 @@ func (s *Service) CreateGroup(req *CreateGroupRequest) (*Group, error) {
 	}, nil
 }
 
-// GetGroups 获取所有分组
+// GetGroups 获取所有分组（管理员用）
 func (s *Service) GetGroups() ([]*Group, error) {
+	return s.GetGroupsByUserID(0)
+}
+
+// GetGroupsByUserID 获取指定用户的分组列表
+func (s *Service) GetGroupsByUserID(userID int64) ([]*Group, error) {
 	var modelGroups []models.Group
-	err := s.db.Order("name").Find(&modelGroups).Error
+	query := s.db.Order("name")
+	if userID > 0 {
+		query = query.Where("user_id = ?", userID)
+	}
+	err := query.Find(&modelGroups).Error
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +94,17 @@ func (s *Service) GetGroups() ([]*Group, error) {
 
 // GetGroupByID 根据ID获取分组
 func (s *Service) GetGroupByID(id int64) (*Group, error) {
+	return s.GetGroupByIDAndUserID(id, 0)
+}
+
+// GetGroupByIDAndUserID 根据ID和user_id获取分组（权限检查用）
+func (s *Service) GetGroupByIDAndUserID(id int64, userID int64) (*Group, error) {
+	query := s.db.Where("id = ?", id)
+	if userID > 0 {
+		query = query.Where("user_id = ?", userID)
+	}
 	var modelGroup models.Group
-	err := s.db.Where("id = ?", id).First(&modelGroup).Error
+	err := query.First(&modelGroup).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("分组不存在")

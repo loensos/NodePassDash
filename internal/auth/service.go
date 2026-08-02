@@ -144,10 +144,14 @@ func (s *Service) IsDefaultCredentials() bool {
 	}
 
 	// 验证密码是否是默认密码
-	return s.VerifyPassword(DefaultAdminPassword, storedPasswordHash)
+	if storedPasswordHash == "" {
+		return false
+	}
+	err := bcrypt.CompareHashAndPassword([]byte(storedPasswordHash), []byte(DefaultAdminPassword))
+	return err == nil
 }
 
-// AuthenticateUser 用户登录验证
+// AuthenticateUser 用户登录验证（单用户版本，兼容旧代码）
 func (s *Service) AuthenticateUser(username, password string) bool {
 	storedUsername, _ := s.GetSystemConfig(ConfigKeyAdminUsername)
 	storedPasswordHash, _ := s.GetSystemConfig(ConfigKeyAdminPassword)
@@ -160,7 +164,11 @@ func (s *Service) AuthenticateUser(username, password string) bool {
 		return false
 	}
 
-	return s.VerifyPassword(password, storedPasswordHash)
+	if storedPasswordHash == "" {
+		return false
+	}
+	err := bcrypt.CompareHashAndPassword([]byte(storedPasswordHash), []byte(password))
+	return err == nil
 }
 
 // CreateSession 创建用户会话
@@ -808,6 +816,15 @@ func (s *Service) ChangeUserPassword(username, newPassword string) error {
 	return s.db.Model(&models.User{}).Where("username = ?", username).Update("password_hash", hash).Error
 }
 
+// ResetUserPassword 管理员重置用户密码
+func (s *Service) ResetUserPassword(username, newPassword string) error {
+	hash, err := s.HashPassword(newPassword)
+	if err != nil {
+		return errors.New("password encryption failed")
+	}
+	return s.db.Model(&models.User{}).Where("username = ?", username).Update("password_hash", hash).Error
+}
+
 // VerifyPassword 验证用户密码（通过用户名）
 func (s *Service) VerifyPassword(username, password string) (bool, string) {
 	var user models.User
@@ -881,6 +898,39 @@ func (s *Service) AuthenticateUserMulti(username, password string) (*models.User
 	// 更新最后登录时间
 	s.db.Model(&user).Update("last_login", time.Now())
 	return &user, nil
+}
+
+// GetCurrentJTI 获取当前有效的 JWT ID
+func (s *Service) GetCurrentJTI() (string, error) {
+	s.jtiMutex.RLock()
+	defer s.jtiMutex.RUnlock()
+	if s.currentJTI == "" {
+		return "", errors.New("no valid JTI")
+	}
+	return s.currentJTI, nil
+}
+
+// SetCurrentUserJTI 设置当前有效的 JWT ID（登录时调用，实现 token 互踢）
+func (s *Service) SetCurrentUserJTI(jti string, userID int64) {
+	s.jtiMutex.Lock()
+	s.currentJTI = jti
+	s.currentUserID = userID
+	s.jtiMutex.Unlock()
+}
+
+// SetCurrentJTI 设置当前有效的 JWT ID（兼容旧接口）
+func (s *Service) SetCurrentJTI(jti string) {
+	s.jtiMutex.Lock()
+	s.currentJTI = jti
+	s.jtiMutex.Unlock()
+}
+
+// ClearCurrentJTI 清除当前 JTI（登出时调用）
+func (s *Service) ClearCurrentJTI() {
+	s.jtiMutex.Lock()
+	s.currentJTI = ""
+	s.currentUserID = 0
+	s.jtiMutex.Unlock()
 }
 
 // StartDemoModeScheduler 启动 Demo 模式定时任务（每天凌晨重置密码）
