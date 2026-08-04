@@ -770,31 +770,110 @@ func (s *Service) GetUserByUsername(username string) (*models.User, error) {
 	return &user, nil
 }
 
-// GetUserByID 根据 ID 获取用户
-func (s *Service) GetUserByID(id int64) (*models.User, error) {
+// UserDetail 返回给前端的用户详细信息（包含配额等）
+type UserDetail struct {
+	ID              int64     `json:"id"`
+	Username        string    `json:"username"`
+	Role            string    `json:"role"`
+	IsActive        bool      `json:"isActive"`
+	LastLogin       time.Time `json:"lastLogin"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	TrafficQuotaMB  int64     `json:"trafficQuotaMB"`
+	TrafficUsedMB   int64     `json:"trafficUsedMB"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+	MaxEndpoints    int64     `json:"maxEndpoints"`
+	MaxTunnels      int64     `json:"maxTunnels"`
+	MaxServices     int64     `json:"maxServices"`
+	AllowMasterNode bool      `json:"allowMasterNode"`
+}
+
+// toUserDetail 将 models.User 转换为 UserDetail
+func toUserDetail(u models.User) UserDetail {
+	return UserDetail{
+		ID:              u.ID,
+		Username:        u.Username,
+		Role:            string(u.Role),
+		IsActive:        u.IsActive,
+		LastLogin:       u.LastLogin,
+		CreatedAt:       u.CreatedAt,
+		UpdatedAt:       u.UpdatedAt,
+		TrafficQuotaMB:  u.TrafficQuotaMB,
+		TrafficUsedMB:   u.TrafficUsedMB,
+		ExpiresAt:       u.ExpiresAt,
+		MaxEndpoints:    u.MaxEndpoints,
+		MaxTunnels:      u.MaxTunnels,
+		MaxServices:     u.MaxServices,
+		AllowMasterNode: u.AllowMasterNode,
+	}
+}
+
+// GetUserByID 根据 ID 获取用户详情（含配额信息）
+func (s *Service) GetUserByID(id int64) (*UserDetail, error) {
 	var user models.User
 	err := s.db.Where("id = ?", id).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
-	return &user, nil
+	detail := toUserDetail(user)
+	return &detail, nil
+}
+
+// UpdateUserRequest 管理员更新用户请求结构
+type UpdateUserRequest struct {
+	Role            string  `json:"role"`
+	Active          *bool   `json:"active"`
+	TrafficQuotaMB  *int64  `json:"trafficQuotaMB"`
+	MaxEndpoints    *int64  `json:"maxEndpoints"`
+	MaxTunnels      *int64  `json:"maxTunnels"`
+	MaxServices     *int64  `json:"maxServices"`
+	AllowMasterNode *bool   `json:"allowMasterNode"`
+	ExpiresAt       *string `json:"expiresAt"` // ISO 格式字符串
 }
 
 // ListUsers 获取所有用户列表
-func (s *Service) ListUsers() ([]models.User, error) {
+func (s *Service) ListUsers() ([]UserDetail, error) {
 	var users []models.User
 	err := s.db.Find(&users).Error
-	return users, err
+	if err != nil {
+		return nil, err
+	}
+	details := make([]UserDetail, len(users))
+	for i := range users {
+		details[i] = toUserDetail(users[i])
+	}
+	return details, nil
 }
 
-// UpdateUser 更新用户信息
-func (s *Service) UpdateUser(id int64, role string, active *bool) error {
+// UpdateUser 更新用户信息（支持配额等字段）
+func (s *Service) UpdateUser(id int64, req UpdateUserRequest) error {
 	updates := map[string]interface{}{}
-	if role != "" {
-		updates["role"] = role
+	if req.Role != "" {
+		if req.Role != string(models.UserRoleAdmin) && req.Role != string(models.UserRoleViewer) {
+			return errors.New("invalid role")
+		}
+		updates["role"] = req.Role
 	}
-	if active != nil {
-		updates["is_active"] = *active
+	if req.Active != nil {
+		updates["is_active"] = *req.Active
+	}
+	if req.TrafficQuotaMB != nil {
+		updates["traffic_quota_mb"] = *req.TrafficQuotaMB
+	}
+	if req.MaxEndpoints != nil {
+		updates["max_endpoints"] = *req.MaxEndpoints
+	}
+	if req.MaxTunnels != nil {
+		updates["max_tunnels"] = *req.MaxTunnels
+	}
+	if req.MaxServices != nil {
+		updates["max_services"] = *req.MaxServices
+	}
+	if req.AllowMasterNode != nil {
+		updates["allow_master_node"] = *req.AllowMasterNode
+	}
+	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
+		updates["expires_at"] = *req.ExpiresAt
 	}
 	if len(updates) == 0 {
 		return nil

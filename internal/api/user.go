@@ -37,8 +37,14 @@ type ChangePasswordRequest struct {
 
 // UpdateUserRequest 更新用户请求结构
 type UpdateUserRequest struct {
-	Role   string `json:"role"`
-	Active *bool  `json:"active"`
+	Role            string  `json:"role"`
+	Active          *bool   `json:"active"`
+	TrafficQuotaMB  *int64  `json:"trafficQuotaMB"`
+	MaxEndpoints    *int64  `json:"maxEndpoints"`
+	MaxTunnels      *int64  `json:"maxTunnels"`
+	MaxServices     *int64  `json:"maxServices"`
+	AllowMasterNode *bool   `json:"allowMasterNode"`
+	ExpiresAt       *string `json:"expiresAt"`
 }
 
 // SetupUserRoutes 设置用户相关路由
@@ -238,7 +244,17 @@ func (h *UserHandler) HandleUpdateUser(c *gin.Context) {
 	}
 
 	// 更新用户
-	err = h.authService.UpdateUser(id, req.Role, req.Active)
+	authReq := auth.UpdateUserRequest{
+		Role:            req.Role,
+		Active:          req.Active,
+		TrafficQuotaMB:  req.TrafficQuotaMB,
+		MaxEndpoints:    req.MaxEndpoints,
+		MaxTunnels:      req.MaxTunnels,
+		MaxServices:     req.MaxServices,
+		AllowMasterNode: req.AllowMasterNode,
+		ExpiresAt:       req.ExpiresAt,
+	}
+	err = h.authService.UpdateUser(id, authReq)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
 		return
