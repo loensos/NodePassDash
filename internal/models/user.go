@@ -12,14 +12,29 @@ const (
 
 // User 用户表 - GORM模型
 type User struct {
-	ID           int64     `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
-	Username     string    `json:"username" gorm:"type:text;uniqueIndex;not null;column:username"`
-	PasswordHash string    `json:"-" gorm:"type:text;not null;column:password_hash"`
-	Role         UserRole  `json:"role" gorm:"type:text;default:'viewer';column:role"`
-	IsActive     bool      `json:"isActive" gorm:"default:true;column:is_active"`
-	LastLogin    time.Time `json:"lastLogin" gorm:"column:last_login"`
-	CreatedAt    time.Time `json:"createdAt" gorm:"autoCreateTime;column:created_at"`
-	UpdatedAt    time.Time `json:"updatedAt" gorm:"autoUpdateTime;column:updated_at"`
+	ID              int64     `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
+	Username        string    `json:"username" gorm:"type:text;uniqueIndex;not null;column:username"`
+	PasswordHash    string    `json:"-" gorm:"type:text;not null;column:password_hash"`
+	Role            UserRole  `json:"role" gorm:"type:text;default:'viewer';column:role"`
+	IsActive        bool      `json:"isActive" gorm:"default:true;column:is_active"`
+	LastLogin       time.Time `json:"lastLogin" gorm:"column:last_login"`
+	CreatedAt       time.Time `json:"createdAt" gorm:"autoCreateTime;column:created_at"`
+	UpdatedAt       time.Time `json:"updatedAt" gorm:"autoUpdateTime;column:updated_at"`
+
+	// 流量配额（单位：MB，0 表示无限制）
+	TrafficQuotaMB int64 `json:"trafficQuotaMB" gorm:"default:0;column:traffic_quota_mb"`
+	// 已用流量（单位：MB）
+	TrafficUsedMB int64 `json:"trafficUsedMB" gorm:"default:0;column:traffic_used_mb"`
+	// 账户有效期（0 表示永不过期）
+	ExpiresAt time.Time `json:"expiresAt" gorm:"column:expires_at"`
+	// 最大端点数（0 表示无限制）
+	MaxEndpoints int64 `json:"maxEndpoints" gorm:"default:0;column:max_endpoints"`
+	// 最大隧道数（0 表示无限制）
+	MaxTunnels int64 `json:"maxTunnels" gorm:"default:0;column:max_tunnels"`
+	// 最大服务数（0 表示无限制）
+	MaxServices int64 `json:"maxServices" gorm:"default:0;column:max_services"`
+	// 是否允许添加主控节点
+	AllowMasterNode bool `json:"allowMasterNode" gorm:"default:false;column:allow_master_node"`
 }
 
 // TableName 设置表名
