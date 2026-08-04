@@ -386,6 +386,9 @@ func QuickInitSchema(db *gorm.DB) error {
 		&models.UserSession{},
 		&models.Group{},
 		&models.OAuthUser{},
+		&models.User{},
+		&models.UserPasswordReset{},
+		&models.UserAuditLog{},
 
 		// 依赖表
 		&models.Tunnel{},
@@ -407,13 +410,16 @@ func StandardMigrate(db *gorm.DB) error {
 	log.Println("检测到现有数据库，使用标准迁移模式")
 
 	// 按照依赖关系顺序迁移表
-	return db.AutoMigrate(
+	err := db.AutoMigrate(
 		// 基础表
 		&models.Endpoint{},
 		&models.SystemConfig{},
 		&models.UserSession{},
 		&models.Group{},
 		&models.OAuthUser{},
+		&models.User{},
+		&models.UserPasswordReset{},
+		&models.UserAuditLog{},
 
 		// 依赖表
 		&models.Tunnel{},
@@ -428,6 +434,69 @@ func StandardMigrate(db *gorm.DB) error {
 		// 服务管理表
 		&models.Services{},
 	)
+
+	// 迁移现有 admin 账号到 users 表
+	err = migrateExistingAdminToUser(db)
+	if err != nil {
+		log.Printf("[DB] 迁移现有管理员账号失败: %v", err)
+	}
+
+	return err
+}
+
+// migrateExistingAdminToUser 将现有的单用户 admin 账号迁移到 users 表
+// 仅在新用户表为空时执行，确保幂等性
+func migrateExistingAdminToUser(db *gorm.DB) error {
+	// 检查是否已有用户
+	var userCount int64
+	if err := db.Model(&models.User{}).Count(&userCount).Error; err != nil {
+		return err
+	}
+	if userCount > 0 {
+		return nil // 已迁移，跳过
+	}
+
+	// 从 system_configs 获取现有 admin 配置
+	var adminUsername, adminPasswordHash string
+	db.Model(&models.SystemConfig{}).Where("key = ?", "admin_username").Pluck("value", &adminUsername)
+	db.Model(&models.SystemConfig{}).Where("key = ?", "admin_password_hash").Pluck("value", &adminPasswordHash)
+
+	if adminUsername == "" {
+		adminUsername = "nodepass" // 默认用户名
+	}
+	if adminPasswordHash == "" {
+		return nil // 无配置，跳过
+	}
+
+	// 创建 admin 用户（ID=1）
+	admin := models.User{
+		Username:     adminUsername,
+		PasswordHash: adminPasswordHash,
+		Role:         models.UserRoleAdmin,
+		IsActive:     true,
+	}
+	if err := db.Create(&admin).Error; err != nil {
+		return err
+	}
+
+	// 迁移现有业务数据，关联到 admin 用户
+	adminID := admin.ID
+
+	// 端点表
+	db.Model(&models.Endpoint{}).Where("user_id IS NULL").Update("user_id", adminID)
+	// 隧道表
+	db.Model(&models.Tunnel{}).Where("user_id IS NULL").Update("user_id", adminID)
+	// 服务表
+	db.Model(&models.Services{}).Where("user_id IS NULL").Update("user_id", adminID)
+	// 分组表
+	db.Model(&models.Group{}).Where("user_id IS NULL").Update("user_id", adminID)
+	// 隧道操作日志表
+	db.Model(&models.TunnelOperationLog{}).Where("user_id IS NULL").Update("user_id", adminID)
+	// 隧道分组关联表
+	db.Model(&models.TunnelGroup{}).Where("user_id IS NULL").Update("user_id", adminID)
+
+	log.Printf("[DB] 单用户迁移完成: admin=%s, adminID=%d", adminUsername, adminID)
+	return nil
 }
 
 // Close 关闭数据库连接

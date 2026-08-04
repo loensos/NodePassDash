@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -11,6 +12,7 @@ import (
 
 	"NodePassDash/internal/models"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -25,11 +27,12 @@ var (
 
 // Service 认证服务
 type Service struct {
-	db          *gorm.DB
-	configCache sync.Map     // 系统配置缓存，跟随当前 DB 连接，避免 setup 切库时串库
-	currentJTI  string       // 当前有效的 JWT ID（内存存储，避免启动时SQLite锁）
-	jtiMutex    sync.RWMutex // JTI 读写锁
-	demoMode    bool         // Demo 模式开关
+	db            *gorm.DB
+	configCache   sync.Map     // 系统配置缓存，跟随当前 DB 连接，避免 setup 切库时串库
+	currentJTI    string       // 当前有效的 JWT ID（内存存储，避免启动时SQLite锁）
+	currentUserID int64        // 当前登录用户 ID
+	jtiMutex      sync.RWMutex // JTI 读写锁
+	demoMode      bool         // Demo 模式开关
 }
 
 // NewService 创建认证服务实例，需要传入GORM数据库连接
@@ -52,12 +55,6 @@ func (s *Service) HashPassword(password string) (string, error) {
 		return "", err
 	}
 	return string(hash), nil
-}
-
-// VerifyPassword 密码验证
-func (s *Service) VerifyPassword(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
 }
 
 // GetSystemConfig 获取系统配置（优先缓存）
@@ -147,10 +144,14 @@ func (s *Service) IsDefaultCredentials() bool {
 	}
 
 	// 验证密码是否是默认密码
-	return s.VerifyPassword(DefaultAdminPassword, storedPasswordHash)
+	if storedPasswordHash == "" {
+		return false
+	}
+	err := bcrypt.CompareHashAndPassword([]byte(storedPasswordHash), []byte(DefaultAdminPassword))
+	return err == nil
 }
 
-// AuthenticateUser 用户登录验证
+// AuthenticateUser 用户登录验证（单用户版本，兼容旧代码）
 func (s *Service) AuthenticateUser(username, password string) bool {
 	storedUsername, _ := s.GetSystemConfig(ConfigKeyAdminUsername)
 	storedPasswordHash, _ := s.GetSystemConfig(ConfigKeyAdminPassword)
@@ -163,7 +164,11 @@ func (s *Service) AuthenticateUser(username, password string) bool {
 		return false
 	}
 
-	return s.VerifyPassword(password, storedPasswordHash)
+	if storedPasswordHash == "" {
+		return false
+	}
+	err := bcrypt.CompareHashAndPassword([]byte(storedPasswordHash), []byte(password))
+	return err == nil
 }
 
 // CreateSession 创建用户会话
@@ -687,30 +692,6 @@ func (s *Service) ValidateOAuthState(state string) bool {
 	return false
 }
 
-// SetCurrentJTI 设置当前有效的 JWT ID（内存存储）
-func (s *Service) SetCurrentJTI(jti string) {
-	s.jtiMutex.Lock()
-	defer s.jtiMutex.Unlock()
-	s.currentJTI = jti
-}
-
-// GetCurrentJTI 获取当前有效的 JWT ID（内存存储）
-func (s *Service) GetCurrentJTI() (string, error) {
-	s.jtiMutex.RLock()
-	defer s.jtiMutex.RUnlock()
-	if s.currentJTI == "" {
-		return "", errors.New("no valid token")
-	}
-	return s.currentJTI, nil
-}
-
-// ClearCurrentJTI 清除当前有效的 JWT ID（登出时使用）
-func (s *Service) ClearCurrentJTI() {
-	s.jtiMutex.Lock()
-	defer s.jtiMutex.Unlock()
-	s.currentJTI = ""
-}
-
 // ResetDemoPassword 重置 Demo 模式密码为默认值
 func (s *Service) ResetDemoPassword() error {
 	if !s.demoMode {
@@ -736,6 +717,220 @@ func (s *Service) ResetDemoPassword() error {
 	fmt.Println("================================")
 
 	return nil
+}
+
+// ==================== 多用户支持方法 ====================
+
+// RegisterUser 注册用户
+func (s *Service) RegisterUser(username, password, role string) (*models.User, error) {
+	// 检查用户名是否已存在
+	var existingUser models.User
+	err := s.db.Where("username = ?", username).First(&existingUser).Error
+	if err == nil {
+		return nil, errors.New("username already exists")
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	// 加密密码
+	passwordHash, err := s.HashPassword(password)
+	if err != nil {
+		return nil, errors.New("password encryption failed")
+	}
+
+	// 创建用户
+	user := &models.User{
+		Username:     username,
+		PasswordHash: passwordHash,
+		Role:         models.UserRole(role),
+		IsActive:     true,
+	}
+	if err := s.db.Create(user).Error; err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+// UsernameExists 检查用户名是否存在
+func (s *Service) UsernameExists(username string) (bool, error) {
+	var count int64
+	err := s.db.Model(&models.User{}).Where("username = ?", username).Count(&count).Error
+	return count > 0, err
+}
+
+// GetUserByUsername 根据用户名获取用户
+func (s *Service) GetUserByUsername(username string) (*models.User, error) {
+	var user models.User
+	err := s.db.Where("username = ?", username).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// GetUserByID 根据 ID 获取用户
+func (s *Service) GetUserByID(id int64) (*models.User, error) {
+	var user models.User
+	err := s.db.Where("id = ?", id).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// ListUsers 获取所有用户列表
+func (s *Service) ListUsers() ([]models.User, error) {
+	var users []models.User
+	err := s.db.Find(&users).Error
+	return users, err
+}
+
+// UpdateUser 更新用户信息
+func (s *Service) UpdateUser(id int64, role string, active *bool) error {
+	updates := map[string]interface{}{}
+	if role != "" {
+		updates["role"] = role
+	}
+	if active != nil {
+		updates["is_active"] = *active
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return s.db.Model(&models.User{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// DeleteUser 删除用户
+func (s *Service) DeleteUser(id int64) error {
+	return s.db.Where("id = ?", id).Delete(&models.User{}).Error
+}
+
+// ChangeUserPassword 修改用户密码
+func (s *Service) ChangeUserPassword(username, newPassword string) error {
+	hash, err := s.HashPassword(newPassword)
+	if err != nil {
+		return errors.New("password encryption failed")
+	}
+	return s.db.Model(&models.User{}).Where("username = ?", username).Update("password_hash", hash).Error
+}
+
+// ResetUserPassword 管理员重置用户密码
+func (s *Service) ResetUserPassword(username, newPassword string) error {
+	hash, err := s.HashPassword(newPassword)
+	if err != nil {
+		return errors.New("password encryption failed")
+	}
+	return s.db.Model(&models.User{}).Where("username = ?", username).Update("password_hash", hash).Error
+}
+
+// VerifyPassword 验证用户密码（通过用户名）
+func (s *Service) VerifyPassword(username, password string) (bool, string) {
+	var user models.User
+	err := s.db.Where("username = ?", username).First(&user).Error
+	if err != nil {
+		return false, "user not found"
+	}
+	if !user.IsActive {
+		return false, "account is disabled"
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
+	if err != nil {
+		return false, "invalid password"
+	}
+	return true, ""
+}
+
+// LogAudit 记录审计日志
+func (s *Service) LogAudit(userID int64, username, action, ipAddress, userAgent string, detail interface{}) {
+	detailStr := ""
+	if detail != nil {
+		b, _ := json.Marshal(detail)
+		detailStr = string(b)
+	}
+	log := models.UserAuditLog{
+		UserID:    userID,
+		Username:  username,
+		Action:    models.AuditAction(action),
+		IPAddress: ipAddress,
+		UserAgent: userAgent,
+		Detail:    &detailStr,
+	}
+	s.db.Create(&log)
+}
+
+// LogAuditByUserIDAndName 通过 userID 和 username 记录审计日志
+func (s *Service) LogAuditByUserIDAndName(c *gin.Context, username, action string, detail ...interface{}) {
+	ipAddress := c.ClientIP()
+	userAgent := c.GetHeader("User-Agent")
+	var d interface{}
+	if len(detail) > 0 {
+		d = detail[0]
+	}
+	// 尝试从 context 获取 userID
+	if userID, exists := c.Get("userId"); exists {
+		if id, ok := userID.(int64); ok {
+			s.LogAudit(id, username, action, ipAddress, userAgent, d)
+			return
+		}
+	}
+	s.LogAudit(0, username, action, ipAddress, userAgent, d)
+}
+
+// AuthenticateUser 多用户版本的登录验证
+func (s *Service) AuthenticateUserMulti(username, password string) (*models.User, error) {
+	var user models.User
+	err := s.db.Where("username = ?", username).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("invalid username or password")
+		}
+		return nil, err
+	}
+	if !user.IsActive {
+		return nil, errors.New("account is disabled")
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
+	if err != nil {
+		return nil, errors.New("invalid username or password")
+	}
+	// 更新最后登录时间
+	s.db.Model(&user).Update("last_login", time.Now())
+	return &user, nil
+}
+
+// GetCurrentJTI 获取当前有效的 JWT ID
+func (s *Service) GetCurrentJTI() (string, error) {
+	s.jtiMutex.RLock()
+	defer s.jtiMutex.RUnlock()
+	if s.currentJTI == "" {
+		return "", errors.New("no valid JTI")
+	}
+	return s.currentJTI, nil
+}
+
+// SetCurrentUserJTI 设置当前有效的 JWT ID（登录时调用，实现 token 互踢）
+func (s *Service) SetCurrentUserJTI(jti string, userID int64) {
+	s.jtiMutex.Lock()
+	s.currentJTI = jti
+	s.currentUserID = userID
+	s.jtiMutex.Unlock()
+}
+
+// SetCurrentJTI 设置当前有效的 JWT ID（兼容旧接口）
+func (s *Service) SetCurrentJTI(jti string) {
+	s.jtiMutex.Lock()
+	s.currentJTI = jti
+	s.jtiMutex.Unlock()
+}
+
+// ClearCurrentJTI 清除当前 JTI（登出时调用）
+func (s *Service) ClearCurrentJTI() {
+	s.jtiMutex.Lock()
+	s.currentJTI = ""
+	s.currentUserID = 0
+	s.jtiMutex.Unlock()
 }
 
 // StartDemoModeScheduler 启动 Demo 模式定时任务（每天凌晨重置密码）

@@ -47,7 +47,7 @@ func AuthMiddleware(authService *auth.Service) gin.HandlerFunc {
 		}
 
 		// 验证 token
-		username, err := authService.ValidateToken(token)
+		claims, err := authService.ValidateToken(token)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Invalid or expired token",
@@ -56,8 +56,10 @@ func AuthMiddleware(authService *auth.Service) gin.HandlerFunc {
 			return
 		}
 
-		// 将用户名存储到 context 中，供后续处理器使用
-		c.Set("username", username)
+		// 将用户信息存储到 context 中，供后续处理器使用
+		c.Set("userId", claims.UserID)
+		c.Set("username", claims.Username)
+		c.Set("role", claims.Role)
 
 		// 继续处理请求
 		c.Next()

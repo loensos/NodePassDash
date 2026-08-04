@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"NodePassDash/internal/models"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -22,7 +24,9 @@ var (
 
 // JWTClaims JWT 声明结构
 type JWTClaims struct {
+	UserID   int64  `json:"userId"`
 	Username string `json:"username"`
+	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -51,11 +55,27 @@ func generateRandomSecret(length int) string {
 
 // GenerateToken 生成 JWT token，返回 token 字符串、过期时间和 JTI
 func (s *Service) GenerateToken(username string) (tokenString string, expiresAt time.Time, jti string, err error) {
+	return s.GenerateTokenWithUserID(username, 0)
+}
+
+// GenerateTokenWithUserID 生成 JWT token，包含用户 ID 和角色
+func (s *Service) GenerateTokenWithUserID(username string, userID int64) (tokenString string, expiresAt time.Time, jti string, err error) {
+	// 获取用户角色
+	role := "viewer"
+	if userID > 0 {
+		var user models.User
+		if err := s.db.Where("id = ?", userID).First(&user).Error; err == nil {
+			role = string(user.Role)
+		}
+	}
+
 	expirationTime := time.Now().Add(jwtExpiration)
 	jti = uuid.New().String() // 生成唯一的 JWT ID
 
 	claims := &JWTClaims{
+		UserID:   userID,
 		Username: username,
+		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti, // 添加 jti claim
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
@@ -73,9 +93,9 @@ func (s *Service) GenerateToken(username string) (tokenString string, expiresAt 
 	return tokenString, expirationTime, jti, nil
 }
 
-// ValidateToken 验证 JWT token 并返回用户名
+// ValidateToken 验证 JWT token 并返回用户信息
 // 验证包括：签名、过期时间、以及 JTI 是否与数据库中的当前有效 JTI 匹配（防止 token 互踢）
-func (s *Service) ValidateToken(tokenString string) (string, error) {
+func (s *Service) ValidateToken(tokenString string) (*JWTClaims, error) {
 	claims := &JWTClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
@@ -87,38 +107,38 @@ func (s *Service) ValidateToken(tokenString string) (string, error) {
 	})
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if !token.Valid {
-		return "", errors.New("invalid token")
+		return nil, errors.New("invalid token")
 	}
 
 	// 验证 JTI 是否与内存中的当前有效 JTI 匹配（实现 token 互踢）
 	currentJTI, err := s.GetCurrentJTI()
 	if err != nil {
 		// 如果内存中没有 JTI，说明所有 token 都已失效（服务重启或登出）
-		return "", errors.New("token has been invalidated")
+		return nil, errors.New("token has been invalidated")
 	}
 
 	if claims.ID != currentJTI {
 		// JTI 不匹配，说明有新的登录，此 token 已被踢出
-		return "", errors.New("token has been replaced by a new login")
+		return nil, errors.New("token has been replaced by a new login")
 	}
 
-	return claims.Username, nil
+	return claims, nil
 }
 
 // RefreshToken 刷新 token（验证旧 token 并生成新 token）
 func (s *Service) RefreshToken(oldToken string) (tokenString string, expiresAt time.Time, jti string, err error) {
 	// 验证旧 token
-	username, validateErr := s.ValidateToken(oldToken)
+	claims, validateErr := s.ValidateToken(oldToken)
 	if validateErr != nil {
 		return "", time.Time{}, "", errors.New("invalid token, cannot refresh")
 	}
 
 	// 生成新 token
-	return s.GenerateToken(username)
+	return s.GenerateTokenWithUserID(claims.Username, claims.UserID)
 }
 
 // SetJWTExpiration 设置 JWT 过期时间（用于自定义配置）

@@ -48,7 +48,7 @@ func SetupAuthRoutes(rg *gin.RouterGroup, authService *auth.Service) {
 	rg.GET("/auth/validate", authMiddleware, authHandler.HandleValidateSession)
 	rg.GET("/auth/me", authMiddleware, authHandler.HandleGetMe)
 	rg.POST("/auth/change-password", authMiddleware, authHandler.HandleChangePassword)
-	rg.POST("/auth/change-username", authMiddleware, authHandler.HandleChangeUsername)
+	rg.POST("/auth/reset-password", authMiddleware, authHandler.HandleAdminResetPassword)
 	rg.POST("/auth/update-security", authMiddleware, authHandler.HandleUpdateSecurity)
 
 	// OAuth2 配置的受保护路由
@@ -98,17 +98,18 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 		return
 	}
 
-	// 验证用户身份
-	if !h.authService.AuthenticateUser(req.Username, req.Password) {
+	// 验证用户身份（支持多用户）
+	user, err := h.authService.AuthenticateUserMulti(req.Username, req.Password)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, auth.LoginResponse{
 			Success: false,
-			Error:   "Invalid username or password",
+			Error:   err.Error(),
 		})
 		return
 	}
 
-	// 生成 JWT token
-	token, expiresAt, jti, err := h.authService.GenerateToken(req.Username)
+	// 生成 JWT token（包含用户 ID 和角色）
+	token, expiresAt, jti, err := h.authService.GenerateTokenWithUserID(req.Username, user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, auth.LoginResponse{
 			Success: false,
@@ -118,18 +119,23 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	}
 
 	// 保存 JTI 到内存（实现 token 互踢：新登录会踢掉旧 token，避免启动时SQLite锁）
-	h.authService.SetCurrentJTI(jti)
+	h.authService.SetCurrentUserJTI(jti, user.ID)
 
-	// 检查是否是默认账号密码
+	// 记录登录审计日志
+	h.authService.LogAudit(user.ID, user.Username, "login", c.ClientIP(), c.GetHeader("User-Agent"), nil)
+
+	// 检查是否是默认账号密码（仅检查原始 admin 配置）
 	isDefaultCredentials := h.authService.IsDefaultCredentials()
 
-	// 返回成功响应，包含 JWT token
+	// 返回成功响应，包含 JWT token 和用户信息
 	response := map[string]interface{}{
 		"success":              true,
 		"message":              "Login successful",
 		"token":                token,
 		"expiresAt":            expiresAt.Format(time.RFC3339),
 		"isDefaultCredentials": isDefaultCredentials,
+		"role":                 string(user.Role),
+		"userId":               user.ID,
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -213,8 +219,13 @@ func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 		return
 	}
 
+	userID, _ := c.Get("userId")
+	role, _ := c.Get("role")
+
 	c.JSON(http.StatusOK, gin.H{
 		"username": username.(string),
+		"userId":   userID,
+		"role":     role,
 	})
 }
 
@@ -280,6 +291,36 @@ func (h *AuthHandler) HandleChangePassword(c *gin.Context) {
 		"success": true,
 		"message": msg,
 	})
+}
+
+// HandleAdminResetPassword 管理员重置用户密码（公开路由）
+func (h *AuthHandler) HandleAdminResetPassword(c *gin.Context) {
+	// 仅管理员可操作
+	if !middleware.IsAdmin(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
+		return
+	}
+
+	var req struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if len(req.Password) < 8 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "密码长度不能少于8位"})
+		return
+	}
+
+	if err := h.authService.ResetUserPassword(req.Username, req.Password); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Password reset successfully"})
 }
 
 // HandleChangeUsername 修改用户名

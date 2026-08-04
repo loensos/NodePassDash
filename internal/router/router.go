@@ -89,12 +89,16 @@ func setupAPIRoutes(r *gin.Engine, db *gorm.DB, sseService *sse.Service, sseMana
 		// 设置认证路由（包含公开和受保护的路由）
 		api.SetupAuthRoutes(apiGroup, authService)
 
+		// 设置用户管理路由
+		api.SetupUserRoutes(apiGroup, authService)
+
 		// 创建认证中间件
 		authMiddleware := middleware.AuthMiddleware(authService)
 
-		// 创建受保护的路由组（所有业务 API 都需要认证）
+		// 创建受保护的路由组（所有业务 API 都需要认证 + 租户隔离）
 		protectedGroup := apiGroup.Group("")
 		protectedGroup.Use(authMiddleware)
+		protectedGroup.Use(middleware.TenantMiddleware())
 		{
 			// 设置各模块的受保护路由
 			api.SetupEndpointRoutes(protectedGroup, endpointService, sseManager)
