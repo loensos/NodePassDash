@@ -186,6 +186,7 @@
       "changePassword": "修改密码",
       "exportData": "导出数据",
       "importData": "导入数据",
+      "userManagement": "用户管理",
       "systemSettings": "系统设置",
       "logout": "退出登录"
     },

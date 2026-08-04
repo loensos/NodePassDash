@@ -186,6 +186,7 @@
       "changePassword": "Change Password",
       "exportData": "Export Data",
       "importData": "Import Data",
+      "userManagement": "User Management",
       "systemSettings": "System Settings",
       "logout": "Logout"
     },

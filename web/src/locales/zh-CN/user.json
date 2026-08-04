@@ -1,0 +1,52 @@
+{
+  "register": {
+    "title": "注册新账号",
+    "subtitle": "创建一个新账号以继续使用",
+    "username": "用户名",
+    "usernamePlaceholder": "请输入用户名（3-20位字母、数字或下划线）",
+    "password": "密码",
+    "passwordPlaceholder": "请输入密码（至少8位）",
+    "confirmPassword": "确认密码",
+    "confirmPasswordPlaceholder": "请再次输入密码",
+    "submit": "注册",
+    "submitting": "注册中...",
+    "haveAccount": "已有账号？",
+    "switchToLogin": "去登录",
+    "success": "注册成功",
+    "successDesc": "注册成功，请登录",
+    "errors": {
+      "usernameInvalid": "用户名格式无效（3-20位字母、数字或下划线）",
+      "passwordTooShort": "密码长度不能少于8位",
+      "passwordMismatch": "两次输入的密码不一致",
+      "usernameExists": "用户名已存在",
+      "networkError": "网络错误，请稍后重试"
+    }
+  },
+  "userManagement": {
+    "title": "用户管理",
+    "subtitle": "管理所有用户账号",
+    "username": "用户名",
+    "role": "角色",
+    "active": "状态",
+    "createdAt": "创建时间",
+    "actions": "操作",
+    "admin": "管理员",
+    "viewer": "普通用户",
+    "setAdmin": "设为管理员",
+    "setViewer": "设为普通用户",
+    "enable": "启用",
+    "disable": "禁用",
+    "delete": "删除",
+    "deleteConfirm": "确认删除用户 {username} 吗？此操作不可撤销。",
+    "resetPassword": "重置密码",
+    "noUsers": "暂无用户",
+    "loading": "加载中...",
+    "toast": {
+      "updateSuccess": "更新成功",
+      "updateFailed": "更新失败",
+      "deleteSuccess": "删除成功",
+      "deleteFailed": "删除失败",
+      "networkError": "网络错误"
+    }
+  }
+}
