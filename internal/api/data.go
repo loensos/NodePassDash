@@ -228,6 +228,7 @@ func (h *DataHandler) handleImportV1(c *gin.Context, baseData struct {
 		URL     string
 		APIPath string
 		APIKey  string
+		UserID  int64
 	}
 
 	// 使用GORM事务
@@ -287,11 +288,13 @@ func (h *DataHandler) handleImportV1(c *gin.Context, baseData struct {
 				URL     string
 				APIPath string
 				APIKey  string
+				UserID  int64
 			}{
 				ID:      newEndpoint.ID,
 				URL:     ep.URL,
 				APIPath: ep.APIPath,
 				APIKey:  ep.APIKey,
+				UserID:  func() int64 { if newEndpoint.UserID != nil { return *newEndpoint.UserID }; return 0 }(),
 			})
 
 			importedEndpoints++
@@ -385,12 +388,12 @@ func (h *DataHandler) handleImportV1(c *gin.Context, baseData struct {
 		// 为每个新导入的端点启动SSE监听
 		if h.sseManager != nil {
 			for _, ep := range newEndpoints {
-				go func(endpointID int64, url, apiPath, apiKey string) {
+				go func(endpointID int64, url, apiPath, apiKey string, userID int64) {
 					log.Infof("[Master-%v] v1数据导入成功，准备启动 SSE 监听", endpointID)
-					if err := h.sseManager.ConnectEndpoint(endpointID, url, apiPath, apiKey); err != nil {
+					if err := h.sseManager.ConnectEndpoint(endpointID, url, apiPath, apiKey, userID); err != nil {
 						log.Errorf("[Master-%v] 启动 SSE 监听失败: %v", endpointID, err)
 					}
-				}(ep.ID, ep.URL, ep.APIPath, ep.APIKey)
+				}(ep.ID, ep.URL, ep.APIPath, ep.APIKey, ep.UserID)
 			}
 		}
 
@@ -454,6 +457,7 @@ func (h *DataHandler) handleImportV2(c *gin.Context, baseData struct {
 			URL     string
 			APIPath string
 			APIKey  string
+			UserID  int64
 		}
 
 		for _, ep := range importDataV2.Data.Endpoints {
@@ -494,11 +498,13 @@ func (h *DataHandler) handleImportV2(c *gin.Context, baseData struct {
 				URL     string
 				APIPath string
 				APIKey  string
+				UserID  int64
 			}{
 				ID:      newEndpoint.ID,
 				URL:     ep.URL,
 				APIPath: ep.APIPath,
 				APIKey:  ep.APIKey,
+				UserID:  func() int64 { if newEndpoint.UserID != nil { return *newEndpoint.UserID }; return 0 }(),
 			})
 
 			importedEndpoints++
@@ -507,12 +513,12 @@ func (h *DataHandler) handleImportV2(c *gin.Context, baseData struct {
 		// 为每个新导入的端点启动SSE监听
 		if h.sseManager != nil {
 			for _, ep := range newEndpoints {
-				go func(endpointID int64, url, apiPath, apiKey string) {
+				go func(endpointID int64, url, apiPath, apiKey string, userID int64) {
 					log.Infof("[Master-%v] v2数据导入成功，准备启动 SSE 监听", endpointID)
-					if err := h.sseManager.ConnectEndpoint(endpointID, url, apiPath, apiKey); err != nil {
+					if err := h.sseManager.ConnectEndpoint(endpointID, url, apiPath, apiKey, userID); err != nil {
 						log.Errorf("[Master-%v] 启动 SSE 监听失败: %v", endpointID, err)
 					}
-				}(ep.ID, ep.URL, ep.APIPath, ep.APIKey)
+				}(ep.ID, ep.URL, ep.APIPath, ep.APIKey, ep.UserID)
 			}
 		}
 
@@ -741,6 +747,7 @@ func (h *DataHandler) HandleBatchImportEndpoints(c *gin.Context) {
 		URL     string
 		APIPath string
 		APIKey  string
+		UserID  int64
 	}
 
 	// 使用GORM事务
@@ -783,11 +790,13 @@ func (h *DataHandler) HandleBatchImportEndpoints(c *gin.Context) {
 				URL     string
 				APIPath string
 				APIKey  string
+				UserID  int64
 			}{
 				ID:      newEndpoint.ID,
 				URL:     ep.URL,
 				APIPath: ep.APIPath,
 				APIKey:  ep.APIKey,
+				UserID:  func() int64 { if newEndpoint.UserID != nil { return *newEndpoint.UserID }; return 0 }(),
 			})
 
 			importedEndpoints++
@@ -796,12 +805,12 @@ func (h *DataHandler) HandleBatchImportEndpoints(c *gin.Context) {
 		// 为每个新导入的端点启动SSE监听
 		if h.sseManager != nil {
 			for _, ep := range newEndpoints {
-				go func(endpointID int64, url, apiPath, apiKey string) {
+				go func(endpointID int64, url, apiPath, apiKey string, userID int64) {
 					log.Infof("[Master-%v] 批量导入成功，准备启动 SSE 监听", endpointID)
-					if err := h.sseManager.ConnectEndpoint(endpointID, url, apiPath, apiKey); err != nil {
+					if err := h.sseManager.ConnectEndpoint(endpointID, url, apiPath, apiKey, userID); err != nil {
 						log.Errorf("[Master-%v] 启动 SSE 监听失败: %v", endpointID, err)
 					}
-				}(ep.ID, ep.URL, ep.APIPath, ep.APIKey)
+				}(ep.ID, ep.URL, ep.APIPath, ep.APIKey, ep.UserID)
 			}
 		}
 

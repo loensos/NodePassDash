@@ -184,6 +184,11 @@ func (h *TunnelHandler) HandleCreateTunnel1(c *gin.Context) {
 		})
 		return
 	}
+	// 设置 user_id：从上下文获取当前租户用户 ID
+	userID, _ := middleware.GetTenantUserID(c)
+	if userID > 0 {
+		req.UserID = &userID
+	}
 	log.Infof("[Master-%v] 创建隧道请求: %v", req.EndpointID, req.Name)
 	// 使用直接URL模式创建隧道，超时时间为 3 秒
 	newTunnel, err := h.tunnelService.NewCreateTunnelAndWait(req, 3*time.Second)
@@ -1135,6 +1140,7 @@ func processAnsiColors(text string) string {
 
 // HandleQuickCreateTunnel 根据 URL 快速创建隧道
 func (h *TunnelHandler) HandleQuickCreateTunnel(c *gin.Context) {
+	userID, _ := middleware.GetTenantUserID(c)
 	var req struct {
 		EndpointID int64  `json:"endpointId"`
 		URL        string `json:"url"`
@@ -1168,7 +1174,7 @@ func (h *TunnelHandler) HandleQuickCreateTunnel(c *gin.Context) {
 	}
 
 	// 使用新的直接URL方法，避免重复解析，超时时间为 3 秒
-	if err := h.tunnelService.QuickCreateTunnelDirectURL(req.EndpointID, req.URL, req.Name, 3*time.Second); err != nil {
+	if err := h.tunnelService.QuickCreateTunnelDirectURL(req.EndpointID, req.URL, req.Name, userID, 3*time.Second); err != nil {
 		c.JSON(http.StatusBadRequest, tunnel.TunnelResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -1184,6 +1190,7 @@ func (h *TunnelHandler) HandleQuickCreateTunnel(c *gin.Context) {
 
 // HandleQuickBatchCreateTunnel 批量快速创建隧道
 func (h *TunnelHandler) HandleQuickBatchCreateTunnel(c *gin.Context) {
+	userID, _ := middleware.GetTenantUserID(c)
 	var req struct {
 		Rules []struct {
 			EndpointID int64  `json:"endpointId"`
@@ -1224,7 +1231,7 @@ func (h *TunnelHandler) HandleQuickBatchCreateTunnel(c *gin.Context) {
 
 	for i, rule := range req.Rules {
 		// 使用直接URL模式批量创建隧道，避免重复解析，超时时间为 3 秒
-		if err := h.tunnelService.QuickCreateTunnelDirectURL(rule.EndpointID, rule.URL, rule.Name, 3*time.Second); err != nil {
+		if err := h.tunnelService.QuickCreateTunnelDirectURL(rule.EndpointID, rule.URL, rule.Name, userID, 3*time.Second); err != nil {
 			failCount++
 			errorMessages = append(errorMessages, fmt.Sprintf("第 %d 条规则失败：%s", i+1, err.Error()))
 			log.Errorf("[API] 批量创建隧道失败 - 规则 %d: %v", i+1, err)
@@ -1303,6 +1310,7 @@ func calculateServiceType(mode string, clientTargetHost string, serverTargetHost
 
 // HandleTemplateCreate 处理模板创建请求
 func (h *TunnelHandler) HandleTemplateCreate(c *gin.Context) {
+	userID, _ := middleware.GetTenantUserID(c)
 
 	// 定义请求结构体
 	var req struct {
@@ -1397,7 +1405,7 @@ func (h *TunnelHandler) HandleTemplateCreate(c *gin.Context) {
 		}
 
 		// 使用直接URL模式创建隧道，超时时间为 3 秒
-		if err := h.tunnelService.QuickCreateTunnelDirectURL(req.Inbounds.MasterID, tunnelURL, tunnelName, 3*time.Second); err != nil {
+		if err := h.tunnelService.QuickCreateTunnelDirectURL(req.Inbounds.MasterID, tunnelURL, tunnelName, userID, 3*time.Second); err != nil {
 			c.JSON(http.StatusBadRequest, tunnel.TunnelResponse{
 				Success: false,
 				Error:   "创建单端隧道失败: " + err.Error(),
@@ -1578,7 +1586,7 @@ func (h *TunnelHandler) HandleTemplateCreate(c *gin.Context) {
 
 		// 第一步：创建server端隧道（使用直接URL模式）
 		log.Infof("[API] 步骤1: 在endpoint %d 创建server隧道 %s", serverConfig.MasterID, serverTunnelName)
-		if err := h.tunnelService.QuickCreateTunnelDirectURL(serverConfig.MasterID, serverURL, serverTunnelName, 3*time.Second); err != nil {
+		if err := h.tunnelService.QuickCreateTunnelDirectURL(serverConfig.MasterID, serverURL, serverTunnelName, userID, 3*time.Second); err != nil {
 			log.Errorf("[API] 创建server端隧道失败: %v", err)
 			c.JSON(http.StatusBadRequest, tunnel.TunnelResponse{
 				Success: false,
@@ -1590,7 +1598,7 @@ func (h *TunnelHandler) HandleTemplateCreate(c *gin.Context) {
 
 		// 第二步：创建client端隧道（使用直接URL模式）
 		log.Infof("[API] 步骤2: 在endpoint %d 创建client隧道 %s", clientConfig.MasterID, clientTunnelName)
-		if err := h.tunnelService.QuickCreateTunnelDirectURL(clientConfig.MasterID, clientURL, clientTunnelName, 3*time.Second); err != nil {
+		if err := h.tunnelService.QuickCreateTunnelDirectURL(clientConfig.MasterID, clientURL, clientTunnelName, userID, 3*time.Second); err != nil {
 			log.Errorf("[API] 创建client端隧道失败: %v", err)
 			// 如果client端创建失败，可以考虑回滚server端，但这里先简单处理
 			c.JSON(http.StatusBadRequest, tunnel.TunnelResponse{
@@ -1800,7 +1808,7 @@ func (h *TunnelHandler) HandleTemplateCreate(c *gin.Context) {
 
 		// 第一步：创建server端隧道（使用直接URL模式）
 		log.Infof("[API] 步骤1: 在endpoint %d 创建server隧道 %s", serverConfig.MasterID, serverTunnelName)
-		if err := h.tunnelService.QuickCreateTunnelDirectURL(serverConfig.MasterID, serverURL, serverTunnelName, 3*time.Second); err != nil {
+		if err := h.tunnelService.QuickCreateTunnelDirectURL(serverConfig.MasterID, serverURL, serverTunnelName, userID, 3*time.Second); err != nil {
 			log.Errorf("[API] 创建server端隧道失败: %v", err)
 			c.JSON(http.StatusBadRequest, tunnel.TunnelResponse{
 				Success: false,
@@ -1812,7 +1820,7 @@ func (h *TunnelHandler) HandleTemplateCreate(c *gin.Context) {
 
 		// 第二步：创建client端隧道（使用直接URL模式）
 		log.Infof("[API] 步骤2: 在endpoint %d 创建client隧道 %s", clientConfig.MasterID, clientTunnelName)
-		if err := h.tunnelService.QuickCreateTunnelDirectURL(clientConfig.MasterID, clientURL, clientTunnelName, 3*time.Second); err != nil {
+		if err := h.tunnelService.QuickCreateTunnelDirectURL(clientConfig.MasterID, clientURL, clientTunnelName, userID, 3*time.Second); err != nil {
 			log.Errorf("[API] 创建client端隧道失败: %v", err)
 			// 如果client端创建失败，可以考虑回滚server端，但这里先简单处理
 			c.JSON(http.StatusBadRequest, tunnel.TunnelResponse{

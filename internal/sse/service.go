@@ -249,6 +249,11 @@ func buildTunnel(payload SSEResp) *models.Tunnel {
 	tunnel := nodepass.ParseTunnelURL(payload.Instance.URL)
 	// 补充从EndpointSSE获取的信息
 	tunnel.EndpointID = payload.EndpointID
+	// 设置用户ID（用于多用户数据隔离）
+	if payload.UserID > 0 {
+		uid := payload.UserID
+		tunnel.UserID = &uid
+	}
 	tunnel.InstanceID = &payload.Instance.ID
 	tunnel.TCPRx = payload.Instance.TCPRx
 	tunnel.TCPTx = payload.Instance.TCPTx
@@ -603,9 +608,10 @@ func (s *Service) upsertService(instanceID string, tunnel *models.Tunnel) {
 
 	// 构建 service 对象
 	service := models.Services{
-		Sid:   *peer.SID,
-		Type:  *peer.Type,
-		Alias: peer.Alias,
+		Sid:    *peer.SID,
+		Type:   *peer.Type,
+		Alias:  peer.Alias,
+		UserID: tunnel.UserID,
 	}
 
 	// 根据 tunnel 类型设置对应的 InstanceId 和要更新的字段列表

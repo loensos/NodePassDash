@@ -2,6 +2,7 @@ package api
 
 import (
 	log "NodePassDash/internal/log"
+	"NodePassDash/internal/middleware"
 	"NodePassDash/internal/models"
 	"NodePassDash/internal/nodepass"
 	"database/sql"
@@ -71,6 +72,7 @@ func (h *ServicesHandler) CreateService(c *gin.Context) {
 
 // handleSingleMode 处理单端转发模式
 func (h *ServicesHandler) handleSingleMode(c *gin.Context, req *ServiceCreateRequest) {
+	userID, _ := middleware.GetTenantUserID(c)
 	if req.Inbounds == nil {
 		c.JSON(400, gin.H{
 			"success": false,
@@ -150,7 +152,7 @@ func (h *ServicesHandler) handleSingleMode(c *gin.Context, req *ServiceCreateReq
 	}
 
 	// 使用直接URL模式创建隧道，超时时间为 3 秒
-	if err := h.tunnelService.QuickCreateTunnelDirectURL(req.Inbounds.MasterID, tunnelURL, tunnelName, 3*time.Second); err != nil {
+	if err := h.tunnelService.QuickCreateTunnelDirectURL(req.Inbounds.MasterID, tunnelURL, tunnelName, userID, 3*time.Second); err != nil {
 		c.JSON(400, gin.H{
 			"success": false,
 			"error":   "Failed to create single-end tunnel: " + err.Error(),
@@ -202,6 +204,7 @@ func (h *ServicesHandler) handleSingleMode(c *gin.Context, req *ServiceCreateReq
 
 // handleBothwayMode 处理双端转发模式
 func (h *ServicesHandler) handleBothwayMode(c *gin.Context, req *ServiceCreateRequest) {
+	userID, _ := middleware.GetTenantUserID(c)
 	if req.Inbounds == nil || req.Outbounds == nil {
 		c.JSON(400, gin.H{
 			"success": false,
@@ -356,7 +359,7 @@ func (h *ServicesHandler) handleBothwayMode(c *gin.Context, req *ServiceCreateRe
 
 	// 第一步：创建server端隧道（使用直接URL模式）
 	log.Infof("[API] 步骤1: 在endpoint %d 创建server隧道 %s", serverConfig.MasterID, serverTunnelName)
-	if err := h.tunnelService.QuickCreateTunnelDirectURL(serverConfig.MasterID, serverURL, serverTunnelName, 3*time.Second); err != nil {
+	if err := h.tunnelService.QuickCreateTunnelDirectURL(serverConfig.MasterID, serverURL, serverTunnelName, userID, 3*time.Second); err != nil {
 		log.Errorf("[API] 创建server端隧道失败: %v", err)
 		c.JSON(400, gin.H{
 			"success": false,
@@ -368,7 +371,7 @@ func (h *ServicesHandler) handleBothwayMode(c *gin.Context, req *ServiceCreateRe
 
 	// 第二步：创建client端隧道（使用直接URL模式）
 	log.Infof("[API] 步骤2: 在endpoint %d 创建client隧道 %s", clientConfig.MasterID, clientTunnelName)
-	if err := h.tunnelService.QuickCreateTunnelDirectURL(clientConfig.MasterID, clientURL, clientTunnelName, 3*time.Second); err != nil {
+	if err := h.tunnelService.QuickCreateTunnelDirectURL(clientConfig.MasterID, clientURL, clientTunnelName, userID, 3*time.Second); err != nil {
 		log.Errorf("[API] 创建client端隧道失败: %v", err)
 		c.JSON(400, gin.H{
 			"success": false,
@@ -439,6 +442,7 @@ func (h *ServicesHandler) handleBothwayMode(c *gin.Context, req *ServiceCreateRe
 
 // handleIntranetMode 处理内网穿透模式
 func (h *ServicesHandler) handleIntranetMode(c *gin.Context, req *ServiceCreateRequest) {
+	userID, _ := middleware.GetTenantUserID(c)
 	if req.Inbounds == nil || req.Outbounds == nil {
 		c.JSON(400, gin.H{
 			"success": false,
@@ -596,7 +600,7 @@ func (h *ServicesHandler) handleIntranetMode(c *gin.Context, req *ServiceCreateR
 
 	// 第一步：创建server端隧道（使用直接URL模式）
 	log.Infof("[API] 步骤1: 在endpoint %d 创建server隧道 %s", serverConfig.MasterID, serverTunnelName)
-	if err := h.tunnelService.QuickCreateTunnelDirectURL(serverConfig.MasterID, serverURL, serverTunnelName, 3*time.Second); err != nil {
+	if err := h.tunnelService.QuickCreateTunnelDirectURL(serverConfig.MasterID, serverURL, serverTunnelName, userID, 3*time.Second); err != nil {
 		log.Errorf("[API] 创建server端隧道失败: %v", err)
 		c.JSON(400, gin.H{
 			"success": false,
@@ -608,7 +612,7 @@ func (h *ServicesHandler) handleIntranetMode(c *gin.Context, req *ServiceCreateR
 
 	// 第二步：创建client端隧道（使用直接URL模式）
 	log.Infof("[API] 步骤2: 在endpoint %d 创建client隧道 %s", clientConfig.MasterID, clientTunnelName)
-	if err := h.tunnelService.QuickCreateTunnelDirectURL(clientConfig.MasterID, clientURL, clientTunnelName, 3*time.Second); err != nil {
+	if err := h.tunnelService.QuickCreateTunnelDirectURL(clientConfig.MasterID, clientURL, clientTunnelName, userID, 3*time.Second); err != nil {
 		log.Errorf("[API] 创建client端隧道失败: %v", err)
 		c.JSON(400, gin.H{
 			"success": false,

@@ -150,7 +150,11 @@ func (h *EndpointHandler) HandleCreateEndpoint(c *gin.Context) {
 	if h.sseManager != nil && newEndpoint != nil {
 		go func(ep *endpoint.Endpoint) {
 			log.Infof("[Master-%v] 创建成功，准备启动 SSE 监听", ep.ID)
-			if err := h.sseManager.ConnectEndpoint(ep.ID, ep.URL, ep.APIPath, ep.APIKey); err != nil {
+			userID := int64(0)
+			if ep.UserID != nil {
+				userID = *ep.UserID
+			}
+			if err := h.sseManager.ConnectEndpoint(ep.ID, ep.URL, ep.APIPath, ep.APIKey, userID); err != nil {
 				log.Errorf("[Master-%v] 启动 SSE 监听失败: %v", ep.ID, err)
 			}
 		}(newEndpoint)
@@ -374,7 +378,11 @@ func (h *EndpointHandler) HandlePatchEndpoint(c *gin.Context) {
 
 			go func(eid int64) {
 				log.Infof("[Master-%v] 手动重连端点，启动 SSE", eid)
-				if err := h.sseManager.ConnectEndpoint(eid, ep.URL, ep.APIPath, ep.APIKey); err != nil {
+				userID := int64(0)
+				if ep.UserID != nil {
+					userID = *ep.UserID
+				}
+				if err := h.sseManager.ConnectEndpoint(eid, ep.URL, ep.APIPath, ep.APIKey, userID); err != nil {
 					log.Errorf("[Master-%v] 手动重连端点失败: %v", eid, err)
 				}
 			}(id)

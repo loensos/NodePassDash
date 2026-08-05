@@ -201,7 +201,7 @@ func (m *Manager) reconnectEndpoint(conn *EndpointConnection) error {
 	}
 
 	// 创建新的连接
-	return m.ConnectEndpoint(conn.EndpointID, conn.URL, conn.APIPath, conn.APIKey)
+	return m.ConnectEndpoint(conn.EndpointID, conn.URL, conn.APIPath, conn.APIKey, conn.UserID)
 }
 
 // performHealthCheck 执行健康检查
@@ -249,8 +249,8 @@ func (m *Manager) InitializeSystem() error {
 
 	// 获取所有端点
 	rows, err := m.db.Query(`
-		SELECT id, url, api_path, api_key 
-		FROM endpoints 
+		SELECT id, url, api_path, api_key, COALESCE(user_id, 0) AS user_id
+		FROM endpoints
 		WHERE status NOT IN ('FAIL', 'DISCONNECT')
 	`)
 	if err != nil {
@@ -265,13 +265,14 @@ func (m *Manager) InitializeSystem() error {
 			URL     string
 			APIPath string
 			APIKey  string
+			UserID  int64
 		}
-		if err := rows.Scan(&endpoint.ID, &endpoint.URL, &endpoint.APIPath, &endpoint.APIKey); err != nil {
+		if err := rows.Scan(&endpoint.ID, &endpoint.URL, &endpoint.APIPath, &endpoint.APIKey, &endpoint.UserID); err != nil {
 			log.Errorf("扫描端点数据失败 %v", err)
 			continue
 		}
 
-		if err := m.ConnectEndpoint(endpoint.ID, endpoint.URL, endpoint.APIPath, endpoint.APIKey); err != nil {
+		if err := m.ConnectEndpoint(endpoint.ID, endpoint.URL, endpoint.APIPath, endpoint.APIKey, endpoint.UserID); err != nil {
 			log.Errorf("[Master-%d#SSE]连接失败%v", endpoint.ID, err)
 		}
 	}
@@ -280,7 +281,7 @@ func (m *Manager) InitializeSystem() error {
 }
 
 // ConnectEndpoint 连接端点SSE
-func (m *Manager) ConnectEndpoint(endpointID int64, url, apiPath, apiKey string) error {
+func (m *Manager) ConnectEndpoint(endpointID int64, url, apiPath, apiKey string, userID int64) error {
 	log.Infof("[Master-%d#SSE]尝试连接->%s", endpointID, url)
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -298,6 +299,7 @@ func (m *Manager) ConnectEndpoint(endpointID int64, url, apiPath, apiKey string)
 			URL:        url,
 			APIPath:    apiPath,
 			APIKey:     apiKey,
+			UserID:     userID,
 			Client: &http.Client{
 				Transport: &http.Transport{
 					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -312,6 +314,7 @@ func (m *Manager) ConnectEndpoint(endpointID int64, url, apiPath, apiKey string)
 	}
 
 	conn := m.connections[endpointID]
+	conn.UserID = userID
 
 	// 创建新的上下文
 	ctx, cancel := context.WithCancel(m.daemonCtx)
@@ -651,6 +654,7 @@ type SSEResp struct {
 	// JSON中不存在的字段，后续手动设置
 	TimeStamp  time.Time `json:"-"` // 不参与JSON序列化/反序列化
 	EndpointID int64     `json:"-"` // 处理ID
+	UserID     int64     `json:"-"` // 处理用户ID
 }
 
 // processPayload 解析 JSON 并调用 service.ProcessEvent
@@ -672,8 +676,23 @@ func (m *Manager) processPayload(endpointID int64, payloadStr string) {
 	} else {
 		payload.TimeStamp = time.Now()
 	}
+	// 从连接中获取所属用户ID，用于多用户数据隔离
+	m.mu.RLock()
+	if conn, exists := m.connections[endpointID]; exists {
+		payload.UserID = conn.UserID
+	}
+	m.mu.RUnlock()
 
 	m.service.ProcessEvent(payload)
+}
+
+// SetEndpointUserID 设置端点对应的用户ID
+func (m *Manager) SetEndpointUserID(endpointID, userID int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if conn, exists := m.connections[endpointID]; exists {
+		conn.UserID = userID
+	}
 }
 
 // GetFileLogger 获取文件日志管理器

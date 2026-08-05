@@ -3081,7 +3081,7 @@ func (s *Service) MigrateServiceSID() (int64, error) {
 
 // QuickCreateTunnelDirectURL 根据完整 URL 快速创建隧道实例，直接传递URL给NodePass API
 // 这个方法避免了URL解析->重新组装的过程，提高性能并减少错误风险
-func (s *Service) QuickCreateTunnelDirectURL(endpointID int64, rawURL string, name string, timeout time.Duration) error {
+func (s *Service) QuickCreateTunnelDirectURL(endpointID int64, rawURL string, name string, userID int64, timeout time.Duration) error {
 	// 1. 基本验证：只解析URL进行格式验证，但不使用解析结果重新组装
 	parsedTunnel := nodepass.ParseTunnelURL(rawURL)
 	if parsedTunnel == nil {
@@ -3094,19 +3094,25 @@ func (s *Service) QuickCreateTunnelDirectURL(endpointID int64, rawURL string, na
 		finalName = fmt.Sprintf("auto-%d-%d", endpointID, time.Now().Unix())
 	}
 
-	// 3. 获取端点信息
+	// 3. 获取端点信息（含 user_id）
 	var endpoint struct {
 		URL     string
 		APIPath string
 		APIKey  string
 		Name    string
+		UserID  int64
 	}
-	err := s.db.Raw(`SELECT url, api_path, api_key, name FROM endpoints WHERE id = ?`, endpointID).Scan(&endpoint).Error
+	err := s.db.Raw(`SELECT url, api_path, api_key, name, COALESCE(user_id, 0) AS user_id FROM endpoints WHERE id = ?`, endpointID).Scan(&endpoint).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return errors.New("指定的端点不存在")
 		}
 		return fmt.Errorf("查询端点信息失败: %v", err)
+	}
+	// 优先使用传入的 userID，否则使用端点的 user_id
+	effectiveUserID := userID
+	if effectiveUserID == 0 && endpoint.UserID > 0 {
+		effectiveUserID = endpoint.UserID
 	}
 
 	// 4. 直接使用原始URL调用NodePass API创建实例
@@ -3141,11 +3147,15 @@ func (s *Service) QuickCreateTunnelDirectURL(endpointID int64, rawURL string, na
 	if waitSuccess {
 		log.Infof("[API] 直接URL等待SSE成功，更新隧道名称为: %s", finalName)
 
-		// 6. 更新隧道名称为指定的名称
-		err = s.db.Model(&models.Tunnel{}).Where("id = ?", tunnelID).Updates(map[string]interface{}{
+		// 6. 更新隧道名称和 user_id 为指定的名称
+		updates := map[string]interface{}{
 			"name":       finalName,
 			"updated_at": time.Now(),
-		}).Error
+		}
+		if effectiveUserID > 0 {
+			updates["user_id"] = effectiveUserID
+		}
+		err = s.db.Model(&models.Tunnel{}).Where("id = ?", tunnelID).Updates(updates).Error
 		if err != nil {
 			log.Warnf("[API] 更新隧道名称失败: %v", err)
 		}

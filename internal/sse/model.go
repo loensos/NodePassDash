@@ -59,6 +59,7 @@ type EndpointConnection struct {
 	APIKey     string
 	Client     *http.Client
 	Cancel     context.CancelFunc
+	UserID     int64 // 所属用户ID（用于多用户数据隔离）
 
 	// 连接状态管理
 	mu                     sync.RWMutex
